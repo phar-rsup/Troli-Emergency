@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: trolleyLogs
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string
+    //   - serialNumber: string (required)
+    //   - patientName: string (required)
+    //   - mrn: string (required)
+    //   - room: string
+    //   - trolleyLocation: string
+    //   - keyNumber: string
+    //   - timestamp: string (required)
+    //   - doctorName: string
+    //   - nurseName: string
+    //   - diagnosis: string
+    //   - items: list of objects
+    //   - narrativeNotes: string
+    //   - newKeyNumber: string
+    //   - pharmacistName: string
+    //   - sealTimestamp: string
+    //   - authorUID: string (required, immutable)
+    //   - createdAt: timestamp (required, immutable)
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.authorUID;
+    }
+
+    function uidUnchanged() {
+      return !('authorUID' in request.resource.data) ||
+        request.resource.data.authorUID == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('authorUID' in request.resource.data) ||
+        request.resource.data.authorUID == resource.data.authorUID;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidTrolleyLog() {
+      let data = request.resource.data;
+      return hasRequiredFields(['serialNumber', 'patientName', 'mrn', 'timestamp', 'authorUID', 'createdAt']) &&
+             data.serialNumber is string && data.serialNumber.size() > 0 && data.serialNumber.size() < 50 &&
+             data.patientName is string && data.patientName.size() > 0 && data.patientName.size() < 100 &&
+             data.mrn is string && data.mrn.size() > 0 && data.mrn.size() < 50 &&
+             data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() < 50 &&
+             data.authorUID is string && data.authorUID.size() > 0 && data.authorUID.size() < 100 &&
+             data.createdAt is timestamp &&
+             (!('room' in data) || (data.room is string && data.room.size() <= 100)) &&
+             (!('trolleyLocation' in data) || (data.trolleyLocation is string && data.trolleyLocation.size() <= 100)) &&
+             (!('keyNumber' in data) || (data.keyNumber is string && data.keyNumber.size() <= 50)) &&
+             (!('doctorName' in data) || (data.doctorName is string && data.doctorName.size() <= 100)) &&
+             (!('nurseName' in data) || (data.nurseName is string && data.nurseName.size() <= 100)) &&
+             (!('diagnosis' in data) || (data.diagnosis is string && data.diagnosis.size() <= 500)) &&
+             (!('narrativeNotes' in data) || (data.narrativeNotes is string && data.narrativeNotes.size() <= 2000)) &&
+             (!('newKeyNumber' in data) || (data.newKeyNumber is string && data.newKeyNumber.size() <= 50)) &&
+             (!('pharmacistName' in data) || (data.pharmacistName is string && data.pharmacistName.size() <= 100)) &&
+             (!('sealTimestamp' in data) || (data.sealTimestamp is string && data.sealTimestamp.size() <= 50)) &&
+             (!('items' in data) || (data.items is list && data.items.size() <= 100));
+    }
+
+    match /trolleyLogs/{logId} {
+      // Anyone authenticated can read the logs (since this is a shared hospital app)
+      allow read: if isAuthenticated();
+      
+      // Anyone authenticated can create a log
+      allow create: if isAuthenticated() && 
+                    isValidTrolleyLog() && 
+                    uidUnchanged();
+                    
+      // Anyone authenticated can update a log (e.g., for sealing)
+      allow update: if isAuthenticated() && 
+                    isValidTrolleyLog() && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['createdAt', 'authorUID', 'serialNumber']);
+                    
+      // Only the author can delete their own logs (or maybe no one should delete logs in a medical setting, but we'll allow owner for now)
+      allow delete: if isOwner();
+    }
+  }
+}

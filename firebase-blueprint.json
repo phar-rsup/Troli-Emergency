@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "UsedItem": {
+      "title": "UsedItem",
+      "description": "An item used from the emergency trolley.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "name", "quantity", "type"]
+    },
+    "TrolleyLog": {
+      "title": "TrolleyLog",
+      "description": "A log entry for emergency trolley usage.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "serialNumber": { "type": "string" },
+        "patientName": { "type": "string" },
+        "mrn": { "type": "string" },
+        "room": { "type": "string" },
+        "trolleyLocation": { "type": "string" },
+        "keyNumber": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "nurseName": { "type": "string" },
+        "diagnosis": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/entities/UsedItem" }
+        },
+        "narrativeNotes": { "type": "string" },
+        "newKeyNumber": { "type": "string" },
+        "pharmacistName": { "type": "string" },
+        "sealTimestamp": { "type": "string" },
+        "authorUID": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["serialNumber", "patientName", "mrn", "timestamp", "authorUID", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/trolleyLogs/{logId}": {
+      "schema": { "$ref": "#/entities/TrolleyLog" },
+      "description": "Stores all emergency trolley usage logs."
+    }
+  }
+}

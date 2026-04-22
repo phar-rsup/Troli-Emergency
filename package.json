@@ -1,0 +1,42 @@
+{
+  "name": "formulir-trolley-emergency",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "node server.ts",
+    "build": "vite build",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.40.0",
+    "express": "^5.2.1",
+    "file-saver": "^2.0.5",
+    "firebase": "^12.10.0",
+    "firebase-admin": "^13.7.0",
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.563.0",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.3",
+    "pdfkit": "^0.18.0",
+    "pdfkit-table": "^0.1.99",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^22.14.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^7.0.11",
+    "@types/pdfkit": "^0.17.5",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
