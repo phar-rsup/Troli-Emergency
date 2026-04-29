@@ -36,6 +36,28 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == resource.data.authorUID;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == "farmasirsup2022@gmail.com"
+      ) && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isNotSealed() {
+      return existing().get('newKeyNumber', '') == '' && existing().get('pharmacistName', '') == '';
+    }
+
     function uidUnchanged() {
       return !('authorUID' in request.resource.data) ||
         request.resource.data.authorUID == request.auth.uid;
@@ -54,9 +76,8 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
 
-    function isValidTrolleyLog() {
-      let data = request.resource.data;
-      return hasRequiredFields(['serialNumber', 'patientName', 'mrn', 'timestamp', 'authorUID', 'createdAt']) &&
+    function isValidTrolleyLog(data) {
+      return data.keys().hasAll(['serialNumber', 'patientName', 'mrn', 'timestamp', 'authorUID', 'createdAt']) &&
              data.serialNumber is string && data.serialNumber.size() > 0 && data.serialNumber.size() < 50 &&
              data.patientName is string && data.patientName.size() > 0 && data.patientName.size() < 100 &&
              data.mrn is string && data.mrn.size() > 0 && data.mrn.size() < 50 &&
@@ -77,22 +98,27 @@ service cloud.firestore {
     }
 
     match /trolleyLogs/{logId} {
-      // Anyone authenticated can read the logs (since this is a shared hospital app)
-      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow get: if isAuthenticated() && isValidId(logId);
       
-      // Anyone authenticated can create a log
       allow create: if isAuthenticated() && 
-                    isValidTrolleyLog() && 
-                    uidUnchanged();
+                    isValidTrolleyLog(incoming()) && 
+                    uidUnchanged() &&
+                    incoming().createdAt == request.time;
                     
-      // Anyone authenticated can update a log (e.g., for sealing)
       allow update: if isAuthenticated() && 
-                    isValidTrolleyLog() && 
+                    isValidId(logId) &&
+                    isValidTrolleyLog(incoming()) && 
                     uidNotModified() &&
-                    areImmutableFieldsUnchanged(['createdAt', 'authorUID', 'serialNumber']);
+                    areImmutableFieldsUnchanged(['createdAt', 'authorUID', 'serialNumber']) &&
+                    (
+                      isAdmin() ||
+                      (isOwner() && isNotSealed()) ||
+                      // Action: Seal (anyone pharmacists can seal)
+                      incoming().diff(existing()).affectedKeys().hasOnly(['newKeyNumber', 'pharmacistName', 'sealTimestamp'])
+                    );
                     
-      // Only the author can delete their own logs (or maybe no one should delete logs in a medical setting, but we'll allow owner for now)
-      allow delete: if isOwner();
+      allow delete: if (isAdmin() || (isOwner() && isNotSealed())) && isValidId(logId);
     }
   }
 }

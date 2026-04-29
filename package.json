@@ -28,6 +28,8 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@types/express": "^5.0.6",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^22.14.0",
@@ -35,6 +37,7 @@
     "@types/nodemailer": "^7.0.11",
     "@types/pdfkit": "^0.17.5",
     "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^10.2.1",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

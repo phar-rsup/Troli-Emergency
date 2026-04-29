@@ -894,7 +894,7 @@ const formatDateTime = (dateString: string) => {
   return `${day}/${month}/${year}, ${strHours}:${minutes}:${seconds} ${ampm}`;
 };
 
-const LogCard = ({ log, onSeal, onDelete, onNotify }: { log: TrolleyForm, onSeal: (id: string, data: {newKeyNumber: string, pharmacistName: string, sealTimestamp: string}) => void | Promise<void>, onDelete: (id: string) => void | Promise<void>, onNotify: (msg: string, type: 'success' | 'error') => void, key?: any }) => {
+const LogCard = ({ log, onSeal, onDelete, onNotify, isAdminUser }: { log: TrolleyForm, onSeal: (id: string, data: {newKeyNumber: string, pharmacistName: string, sealTimestamp: string}) => void | Promise<void>, onDelete: (id: string) => void | Promise<void>, onNotify: (msg: string, type: 'success' | 'error') => void, isAdminUser: boolean, key?: any }) => {
   const [sealData, setSealData] = useState({
     newKeyNumber: "",
     pharmacistName: "",
@@ -957,7 +957,7 @@ const LogCard = ({ log, onSeal, onDelete, onNotify }: { log: TrolleyForm, onSeal
           </div>
         </div>
         
-        {!log.newKeyNumber && !log.pharmacistName && (
+        {!log.newKeyNumber && !log.pharmacistName && (isAdminUser || log.authorUID === auth.currentUser?.uid) && (
           <button
             onClick={() => onDelete(log.id)}
             className="p-2 text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all shadow-sm"
@@ -1130,10 +1130,28 @@ const App = () => {
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
   const isInitialLoad = useRef(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Preload notification sound
+    audioRef.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+    
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        console.log('SW Registered', reg);
+      }).catch(err => {
+        console.log('SW Registration failed', err);
+      });
+    }
+  }, []);
 
   // Initialize API Key safely
-  const apiKey = process.env.API_KEY || ""; 
+  const apiKey = process.env.GEMINI_API_KEY || ""; 
   
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -1143,6 +1161,11 @@ const App = () => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
+      if (currentUser) {
+        setIsAdminUser(currentUser.email === "farmasirsup2022@gmail.com");
+      } else {
+        setIsAdminUser(false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -1165,15 +1188,22 @@ const App = () => {
             const newLog = change.doc.data() as TrolleyForm;
             // Hanya notifikasi jika log benar-benar baru (punya patientName)
             if (newLog.patientName && notifPermission === "granted") {
-              const notification = new Notification("Log Troli Emergency Baru", {
-                body: `Pasien: ${newLog.patientName} | Lokasi: ${newLog.trolleyLocation || '-'}`,
-                icon: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png", // Icon medis
-                tag: "new-log-" + change.doc.id, // Prevent duplicate showing
+              const notification = new Notification("🚨 Log Troli Baru!", {
+                body: `${newLog.patientName} - ${newLog.trolleyLocation || '-'}`,
+                icon: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png",
+                tag: "new-log-" + change.doc.id,
+                requireInteraction: true, // Biar gak ilang sampai di klik
               });
+              
+              // Play sound
+              if (audioRef.current) {
+                audioRef.current.play().catch(e => console.log("Sound play error:", e));
+              }
               
               notification.onclick = () => {
                 window.focus();
                 setActiveTab("history");
+                notification.close();
               };
             }
           }
@@ -1327,7 +1357,7 @@ const App = () => {
 
   const handleExtractFromSimkes = async () => {
     if (!apiKey) {
-      showNotification("API Key hilang (process.env.API_KEY)", "error");
+      showNotification("API Key hilang (process.env.GEMINI_API_KEY)", "error");
       return;
     }
     
@@ -1339,7 +1369,6 @@ const App = () => {
     setIsGenerating(true);
     try {
       const ai = new GoogleGenAI({ apiKey });
-      const model = "gemini-3-flash-preview"; 
       
       const prompt = `
         Anda adalah asisten medis pintar. Tugas anda adalah mengekstrak entitas data dari teks mentah sistem SIMKES berikut ke dalam format JSON.
@@ -1352,6 +1381,7 @@ const App = () => {
         - patientName: Nama lengkap pasien.
         - mrn: Nomor Rekam Medis (RM).
         - room: Lokasi ruangan/bangsal.
+        - timestamp: Waktu kejadian dalam format ISO YYYY-MM-DDTHH:mm (jika tidak ada, gunakan null).
         - trolleyLocation: Lokasi Troli Emergency berdasarkan ruangan. Aturannya:
           - Jika ruangan mengandung "HCU", "PICU", atau "ICU", maka "TROLLY EMERGENCY ICU".
           - Jika ruangan mengandung "SADEWA INFEKSI", maka "TROLLY EMERGENCY SADEWA 1".
@@ -1366,11 +1396,11 @@ const App = () => {
           - Jika ruangan mengandung "SADEWA 2", maka "TROLLY EMERGENCY SADEWA 2".
           - Jika tidak ada yang cocok, biarkan null.
 
-        Output hanya JSON valid.
+        Output harus berupa JSON valid.
       `;
 
       const response = await ai.models.generateContent({
-        model,
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
           responseMimeType: "application/json"
@@ -1390,12 +1420,13 @@ const App = () => {
         room: extracted.room || prev.room,
         trolleyLocation: newTrolleyLocation,
         keyNumber: autoKeyNumber,
+        timestamp: extracted.timestamp || prev.timestamp,
       }));
       
       showNotification("Data Pasien & Waktu Berhasil Diekstrak", "success");
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      showNotification("Gagal mengekstrak data SIMKES", "error");
+      showNotification(error.message || "Gagal mengekstrak data SIMKES", "error");
     } finally {
       setIsGenerating(false);
     }
@@ -1406,8 +1437,9 @@ const App = () => {
       showNotification("Nama Pasien dan No. RM wajib diisi", "error");
       return;
     }
-    if (!user) return;
+    if (!user || isSubmitting) return;
     
+    setIsSubmitting(true);
     try {
       const logData = {
         ...formData,
@@ -1427,10 +1459,12 @@ const App = () => {
       }).catch(err => console.error("Failed to send telegram notification", err));
 
       setFormData({ ...INITIAL_FORM, id: crypto.randomUUID(), serialNumber: generateSerialNumber(), timestamp: getJakartaDateTime() });
-      showNotification("Log berhasil disimpan", "success");
+      showNotification("Log berhasil disimpan ke Riwayat Terpadu", "success");
       setActiveTab("history");
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'trolleyLogs');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1471,10 +1505,14 @@ const App = () => {
       return;
     }
 
+    if (!isAdminUser) {
+      showNotification("Hanya Admin yang dapat mengekspor dan mereset riwayat", "error");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const zip = new JSZip();
-      
-      // Group logs by trolleyLocation
       const groupedLogs = savedLogs.reduce((acc, log) => {
         const loc = log.trolleyLocation || "Tanpa_Lokasi";
         if (!acc[loc]) acc[loc] = [];
@@ -1575,8 +1613,9 @@ const App = () => {
       setShowExportConfirm(false);
     } catch (error) {
       console.error("Error generating PDFs:", error);
-      showNotification("Gagal mengekspor PDF", "error");
-      setShowExportConfirm(false);
+      showNotification("Gagal mengekspor laporan", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1647,25 +1686,73 @@ const App = () => {
           </div>
           <div className="flex items-center space-x-1">
             {/* Notification Control */}
-            <button
-              onClick={requestNotificationPermission}
-              className={`p-2 rounded-full mr-2 transition-colors ${
-                notifPermission === 'granted' 
-                  ? 'text-green-600 hover:bg-green-50' 
-                  : notifPermission === 'denied'
-                    ? 'text-red-400 hover:bg-red-50'
-                    : 'text-gray-400 hover:bg-gray-100'
-              }`}
-              title={
-                notifPermission === 'granted' 
-                  ? "Notifikasi Aktif" 
-                  : notifPermission === 'denied'
-                    ? "Notifikasi Diblokir"
-                    : "Aktifkan Notifikasi"
-              }
-            >
-              {notifPermission === 'granted' ? <Bell className="w-5 h-5 fill-current" /> : <BellOff className="w-5 h-5" />}
-            </button>
+            <div className="relative group">
+              <button
+                onClick={requestNotificationPermission}
+                className={`p-2 rounded-full mr-1 transition-all duration-300 relative ${
+                  notifPermission === 'granted' 
+                    ? 'text-green-600 hover:bg-green-50 shadow-sm' 
+                    : notifPermission === 'denied'
+                      ? 'text-red-500 hover:bg-red-50'
+                      : 'text-gray-400 hover:bg-gray-100'
+                }`}
+                aria-label="Toggle notifications"
+              >
+                {notifPermission === 'granted' ? (
+                  <Bell className="w-5 h-5 fill-current" />
+                ) : (
+                  <div className="relative">
+                    <BellOff className="w-5 h-5" />
+                    {notifPermission === 'default' && (
+                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </button>
+              
+              {/* Tooltip */}
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-xl p-3 invisible group-hover:visible z-40 transition-all opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Status Notifikasi</p>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    notifPermission === 'granted' ? 'bg-green-500' : 
+                    notifPermission === 'denied' ? 'bg-red-500' : 'bg-gray-400'
+                  }`} />
+                  <span className="text-xs font-bold text-gray-800">
+                    {notifPermission === 'granted' ? 'Aktif (Berjalan)' : 
+                     notifPermission === 'denied' ? 'Diblokir' : 'Buka Izin'}
+                  </span>
+                </div>
+                <p className="text-[9px] text-gray-500 mt-2 leading-tight">
+                  {notifPermission === 'granted' 
+                    ? "Notifikasi akan muncul di Windows/Chrome meskipun aplikasi diminimize."
+                    : "Klik icon lonceng lalu pilih 'Allow' saat muncul konfirmasi di browser."}
+                </p>
+                {notifPermission === 'granted' && (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      new Notification("Tes Notifikasi", { 
+                        body: "Jika Anda melihat ini, maka sistem notifikasi sudah aktif!",
+                        icon: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png",
+                        requireInteraction: false
+                      });
+                      if (audioRef.current) {
+                        audioRef.current.currentTime = 0;
+                        audioRef.current.play().catch(e => console.error(e));
+                      }
+                    }}
+                    className="mt-2 text-[9px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 hover:bg-red-100 transition-colors w-full font-bold"
+                  >
+                    🔊 KLIK UNTUK TES SUARA & NOTIF
+                  </button>
+                )}
+              </div>
+            </div>
+
             <button
               onClick={() => {
                 setFormData({ ...INITIAL_FORM, id: crypto.randomUUID(), serialNumber: generateSerialNumber(), timestamp: getJakartaDateTime() });
@@ -1686,6 +1773,10 @@ const App = () => {
               Riwayat ({savedLogs.length})
             </button>
             <div className="w-px h-6 bg-gray-300 mx-2"></div>
+            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-red-50 rounded-full border border-red-100 mr-2">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">Live</span>
+            </div>
             <button
               onClick={() => signOut(auth)}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
@@ -2007,10 +2098,20 @@ const App = () => {
             <div className="flex justify-end pt-4">
                <button
                 onClick={handleSave}
-                className="flex items-center px-10 py-4 bg-red-600 text-white rounded-xl shadow-lg hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 font-bold transition-all transform active:scale-95"
+                disabled={isSubmitting}
+                className={`flex items-center px-10 py-4 rounded-xl shadow-lg focus:outline-none focus:ring-4 focus:ring-red-200 font-bold transition-all transform active:scale-95 ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white animate-pulse-subtle'}`}
               >
-                <Save className="w-5 h-5 mr-2" />
-                Simpan Log Pemakaian
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Menyimpan ke Riwayat...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5 mr-2" />
+                    Simpan Log Pemakaian
+                  </>
+                )}
               </button>
             </div>
 
@@ -2018,11 +2119,14 @@ const App = () => {
         ) : (
           <div className="space-y-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                <History className="w-6 h-6 mr-2 text-gray-600" />
-                Riwayat Pemakaian
-              </h2>
-              {savedLogs.length > 0 && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                  <History className="w-6 h-6 mr-2 text-gray-600" />
+                  Riwayat Pemakaian Terpadu
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">Data dari semua petugas tersinkronisasi di sini secara otomatis.</p>
+              </div>
+              {savedLogs.length > 0 && isAdminUser && (
                 <button
                   onClick={() => setShowExportConfirm(true)}
                   className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
@@ -2117,7 +2221,7 @@ const App = () => {
                   </div>
                 ) : (
                   filteredHistoryLogs.map((log) => (
-                    <LogCard key={log.id} log={log} onSeal={handleSealLog} onDelete={handleDeleteLog} onNotify={showNotification} />
+                    <LogCard key={log.id} log={log} onSeal={handleSealLog} onDelete={handleDeleteLog} onNotify={showNotification} isAdminUser={isAdminUser} />
                   ))
                 )}
               </div>
@@ -2165,17 +2269,18 @@ const App = () => {
             </p>
             <div className="flex justify-end space-x-3">
               <button
+                disabled={isSubmitting}
                 onClick={() => setShowExportConfirm(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 Batal
               </button>
               <button
+                disabled={isSubmitting}
                 onClick={handleExportPDFs}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center disabled:bg-gray-400"
               >
-                <Download className="w-4 h-4 mr-2" />
-                Ya, Ekspor & Reset
+                {isSubmitting ? 'Mengekspor...' : 'Ya, Ekspor & Reset'}
               </button>
             </div>
           </div>
