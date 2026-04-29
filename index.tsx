@@ -1377,11 +1377,10 @@ const App = () => {
         ${formData.narrativeNotes}
         
         Instruksi:
-        HANYA ekstrak field berikut untuk bagian "Pasien & Waktu". Jika tidak ditemukan, biarkan null atau string kosong.
+        HANYA ekstrak field berikut untuk bagian "Pasien". Jika tidak ditemukan, biarkan null atau string kosong.
         - patientName: Nama lengkap pasien.
         - mrn: Nomor Rekam Medis (RM).
         - room: Lokasi ruangan/bangsal.
-        - timestamp: Waktu kejadian dalam format ISO YYYY-MM-DDTHH:mm (jika tidak ada, gunakan null).
         - trolleyLocation: Lokasi Troli Emergency berdasarkan ruangan. Aturannya:
           - Jika ruangan mengandung "HCU", "PICU", atau "ICU", maka "TROLLY EMERGENCY ICU".
           - Jika ruangan mengandung "SADEWA INFEKSI", maka "TROLLY EMERGENCY SADEWA 1".
@@ -1420,10 +1419,10 @@ const App = () => {
         room: extracted.room || prev.room,
         trolleyLocation: newTrolleyLocation,
         keyNumber: autoKeyNumber,
-        timestamp: extracted.timestamp || prev.timestamp,
+        // Timestamp tetap dipertahankan dari nilai sebelumnya (tidak diubah AI)
       }));
       
-      showNotification("Data Pasien & Waktu Berhasil Diekstrak", "success");
+      showNotification("Data Pasien Berhasil Diekstrak", "success");
     } catch (error: any) {
       console.error(error);
       showNotification(error.message || "Gagal mengekstrak data SIMKES", "error");
