@@ -772,7 +772,7 @@ const StaffAutocomplete = ({
       const matches = filteredDb.filter(p => p.name.toLowerCase().includes(search)).slice(0, 50);
       setSuggestions(matches);
       setShowSuggestions(matches.length > 0);
-      setSelectedIndex(-1);
+      setSelectedIndex(matches.length > 0 ? 0 : -1);
     } else {
       setShowSuggestions(false);
       setSelectedIndex(-1);
@@ -786,7 +786,13 @@ const StaffAutocomplete = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showSuggestions) return;
+    if (!showSuggestions) {
+      if (e.key === 'Enter' && value.trim()) {
+        setShowSuggestions(false);
+        setSelectedIndex(-1);
+      }
+      return;
+    }
 
     switch (e.key) {
       case 'ArrowDown':
@@ -831,9 +837,11 @@ const StaffAutocomplete = ({
                const matches = filteredDb.filter(p => p.name.toLowerCase().includes(search)).slice(0, 50);
                setSuggestions(matches);
                setShowSuggestions(matches.length > 0);
+               setSelectedIndex(matches.length > 0 ? 0 : -1);
             } else {
                setSuggestions(filteredDb.slice(0, 50));
                setShowSuggestions(true);
+               setSelectedIndex(0);
             }
           }}
           className="w-full pl-9 pr-8 rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm p-2 border"
@@ -902,12 +910,14 @@ const LogCard = ({ log, onSeal, onDelete, onNotify, isAdminUser }: { log: Trolle
   });
   const [hasEditedTime, setHasEditedTime] = useState(false);
   const [showPharmacistSuggestions, setShowPharmacistSuggestions] = useState(false);
+  const [selectedPharmacistIndex, setSelectedPharmacistIndex] = useState(-1);
   const pharmacistInputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (pharmacistInputRef.current && !pharmacistInputRef.current.contains(event.target as Node)) {
         setShowPharmacistSuggestions(false);
+        setSelectedPharmacistIndex(-1);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -923,6 +933,36 @@ const LogCard = ({ log, onSeal, onDelete, onNotify, isAdminUser }: { log: Trolle
   const filteredPharmacists = PHARMACISTS.filter(name => 
     name.toLowerCase().includes(sealData.pharmacistName.toLowerCase())
   );
+
+  const handlePharmacistKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showPharmacistSuggestions) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedPharmacistIndex(prev => (prev + 1) % (filteredPharmacists.length || 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedPharmacistIndex(prev => (prev - 1 + (filteredPharmacists.length || 1)) % (filteredPharmacists.length || 1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        const finalIndex = selectedPharmacistIndex >= 0 && selectedPharmacistIndex < filteredPharmacists.length 
+          ? selectedPharmacistIndex 
+          : 0;
+        if (filteredPharmacists.length > 0) {
+          setSealData({...sealData, pharmacistName: filteredPharmacists[finalIndex]});
+          setShowPharmacistSuggestions(false);
+          setSelectedPharmacistIndex(-1);
+        }
+        break;
+      case 'Escape':
+        setShowPharmacistSuggestions(false);
+        setSelectedPharmacistIndex(-1);
+        break;
+    }
+  };
 
   const handleSeal = () => {
     if (!sealData.newKeyNumber || !sealData.pharmacistName) {
@@ -1031,26 +1071,33 @@ const LogCard = ({ log, onSeal, onDelete, onNotify, isAdminUser }: { log: Trolle
                 type="text"
                 placeholder="Nama Petugas"
                 value={sealData.pharmacistName}
+                onKeyDown={handlePharmacistKeyDown}
                 onFocus={() => {
                   handleInteraction();
                   setShowPharmacistSuggestions(true);
+                  setSelectedPharmacistIndex(0);
                 }}
                 onChange={e => {
                   setSealData({...sealData, pharmacistName: e.target.value});
                   setShowPharmacistSuggestions(true);
+                  setSelectedPharmacistIndex(0);
                 }}
                 className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm p-2 border bg-white"
               />
               {showPharmacistSuggestions && filteredPharmacists.length > 0 && (
                 <ul className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none">
-                  {filteredPharmacists.map(name => (
+                  {filteredPharmacists.map((name, idx) => (
                     <li
                       key={name}
                       onClick={() => {
                         setSealData({...sealData, pharmacistName: name});
                         setShowPharmacistSuggestions(false);
+                        setSelectedPharmacistIndex(-1);
                       }}
-                      className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-red-50 hover:text-red-900 text-gray-900"
+                      onMouseEnter={() => setSelectedPharmacistIndex(idx)}
+                      className={`cursor-pointer select-none relative py-2 pl-3 pr-9 transition-colors text-gray-900 ${
+                        idx === selectedPharmacistIndex ? "bg-red-100 text-red-950 font-medium" : "hover:bg-red-50 hover:text-red-900"
+                      }`}
                     >
                       {name}
                     </li>
@@ -1443,19 +1490,56 @@ const App = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.patientName || !formData.mrn) {
-      showNotification("Nama Pasien dan No. RM wajib diisi", "error");
-      return;
-    }
     if (!user || isSubmitting) return;
-    
+
+    const patientNameClean = (formData.patientName || "").trim().toUpperCase();
+    const isSupervisi = patientNameClean === "SUPERVISI TROLLEY";
+
+    if (isSupervisi) {
+      if (!formData.patientName.trim()) {
+        showNotification("Nama Pasien wajib diisi", "error");
+        return;
+      }
+    } else {
+      // Wajib mengisi formulir secara utuh
+      const missingFields: string[] = [];
+      if (!formData.patientName.trim()) missingFields.push("Nama Pasien");
+      if (!formData.mrn.trim()) missingFields.push("No. RM");
+      if (!formData.room.trim()) missingFields.push("Ruangan/Bangsal");
+      if (!formData.trolleyLocation || !formData.trolleyLocation.trim()) missingFields.push("Lokasi Troli");
+      if (!formData.keyNumber.trim()) missingFields.push("Nomor Kunci");
+      if (!formData.timestamp.trim()) missingFields.push("Tanggal Kejadian");
+      if (!formData.doctorName.trim()) missingFields.push("Dokter PJ");
+      if (!formData.nurseName.trim()) missingFields.push("Perawat PJ");
+      if (!formData.diagnosis.trim()) missingFields.push("Kejadian/Diagnosis");
+      if (formData.items.length === 0) missingFields.push("Minimal 1 Obat/Alat");
+
+      if (missingFields.length > 0) {
+        showNotification(`Formulir harus diisi secara utuh! Kurang: ${missingFields.join(", ")}`, "error");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
+      // Fallback values for SUPERVISI TROLLEY if fields are empty to comply with Firestore Rules
+      const finalMRN = isSupervisi && !formData.mrn.trim() ? "SUPERVISI" : formData.mrn;
+      const finalRoom = isSupervisi && !formData.room.trim() ? "SUPERVISI" : formData.room;
+      const finalTrolleyLocation = isSupervisi && (!formData.trolleyLocation || !formData.trolleyLocation.trim()) ? "SUPERVISI" : formData.trolleyLocation;
+      const finalKeyNumber = isSupervisi && !formData.keyNumber.trim() ? "SUPERVISI" : formData.keyNumber;
+      const finalTimestamp = isSupervisi && !formData.timestamp.trim() ? getJakartaDateTime() : formData.timestamp;
+
       const logData = {
         ...formData,
+        mrn: finalMRN,
+        room: finalRoom,
+        trolleyLocation: finalTrolleyLocation,
+        keyNumber: finalKeyNumber,
+        timestamp: finalTimestamp,
         authorUID: user.uid,
         createdAt: serverTimestamp()
       };
+      
       // Remove id before saving to let firestore generate it
       delete (logData as any).id;
       
@@ -1848,6 +1932,7 @@ const App = () => {
                     value={formData.patientName}
                     onChange={handleInputChange}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm p-2 border"
+                    placeholder="Contoh: Budi Santoso"
                   />
                 </div>
                 <div>
@@ -1978,13 +2063,14 @@ const App = () => {
                       placeholder="Ketik nama obat atau alkes..."
                       value={searchTerm}
                       onChange={(e) => {
-                        setSearchTerm(e.target.value);
+                        const val = e.target.value;
+                        setSearchTerm(val);
                         setShowSuggestions(true);
-                        setSelectedIndex(-1);
+                        setSelectedIndex(val ? 0 : -1);
                       }}
                       onFocus={() => {
                         setShowSuggestions(true);
-                        setSelectedIndex(-1);
+                        setSelectedIndex(searchTerm ? 0 : -1);
                       }}
                       onKeyDown={handleKeyDown}
                     />
