@@ -935,23 +935,34 @@ const LogCard = ({ log, onSeal, onDelete, onNotify, isAdminUser }: { log: Trolle
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 transition-all hover:shadow-md border-l-4 border-l-red-500 relative group">
       <div className="flex justify-between items-start mb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-lg font-bold text-gray-900">{log.patientName}</h3>
+        <div className="w-full">
+          <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
+            <h3 className="text-lg font-extrabold text-gray-900 leading-none">{log.patientName}</h3>
+            
+            {/* RM Number Badge - Crucial Info made parallel and highly prominent */}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold font-mono shadow-sm" id={`rm-badge-${log.id}`}>
+              <ClipboardList className="w-3.5 h-3.5 text-red-600" />
+              <span>RM: {log.mrn}</span>
+            </span>
+
+            {/* Key Number Badge - Crucial Info made parallel and highly prominent */}
+            {log.keyNumber && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold shadow-sm" id={`key-badge-${log.id}`}>
+                <Key className="w-3.5 h-3.5 text-amber-600" />
+                <span>Kunci: {log.keyNumber}</span>
+              </span>
+            )}
+
             {log.serialNumber && (
-              <span className="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider">
+              <span className="inline-flex items-center bg-gray-100 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200 tracking-wider">
                 {log.serialNumber}
               </span>
             )}
           </div>
-          <div className="flex flex-wrap items-center text-sm text-gray-500 mt-2 gap-2">
-            <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-mono text-xs">RM: {log.mrn}</span>
+          <div className="flex flex-wrap items-center text-sm text-gray-500 gap-2">
             <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 text-xs flex items-center"><User className="w-3 h-3 mr-1" /> Bed: {log.room}</span>
             {log.trolleyLocation && (
               <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 text-xs flex items-center"><MapPin className="w-3 h-3 mr-1" /> Troli: {log.trolleyLocation}</span>
-            )}
-            {log.keyNumber && (
-              <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 text-xs flex items-center"><Key className="w-3 h-3 mr-1" /> Kunci: {log.keyNumber}</span>
             )}
             <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 text-xs flex items-center"><Clock className="w-3 h-3 mr-1" /> {formatDateTime(log.timestamp)}</span>
           </div>
@@ -960,7 +971,7 @@ const LogCard = ({ log, onSeal, onDelete, onNotify, isAdminUser }: { log: Trolle
         {!log.newKeyNumber && !log.pharmacistName && (isAdminUser || log.authorUID === auth.currentUser?.uid) && (
           <button
             onClick={() => onDelete(log.id)}
-            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all shadow-sm"
+            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all shadow-sm shrink-0 ml-4"
             title="Hapus Log"
           >
             <Trash2 className="w-5 h-5" />
