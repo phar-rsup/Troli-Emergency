@@ -1866,11 +1866,6 @@ const App = () => {
             >
               Riwayat ({savedLogs.length})
             </button>
-            <div className="w-px h-6 bg-gray-300 mx-2"></div>
-            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-red-50 rounded-full border border-red-100 mr-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">Live</span>
-            </div>
             <button
               onClick={() => signOut(auth)}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
