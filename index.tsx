@@ -33,8 +33,11 @@ import {
   Calendar,
   LogOut,
   Bell,
-  BellOff
+  BellOff,
+  Thermometer
 } from "lucide-react";
+
+import { TemperatureMonitoring } from "./TemperatureMonitoring";
 
 // --- Firebase Error Handling ---
 enum OperationType {
@@ -1164,11 +1167,23 @@ const LoginScreen = () => {
 const App = () => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<"form" | "history">("form");
+  const [activeTab, setActiveTab] = useState<"form" | "history" | "temperature">("form");
   const [formData, setFormData] = useState<TrolleyForm>(() => ({ ...INITIAL_FORM, id: crypto.randomUUID(), serialNumber: generateSerialNumber() }));
   const [savedLogs, setSavedLogs] = useState<TrolleyForm[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+
+  // Combine STAFF_DATABASE and PHARMACISTS for temperature officer list
+  const allStaffNames = React.useMemo(() => {
+    const uniq = new Set<string>();
+    STAFF_DATABASE.forEach(s => {
+      if (s.name) uniq.add(s.name.trim());
+    });
+    PHARMACISTS.forEach(name => {
+      if (name) uniq.add(name.trim());
+    });
+    return Array.from(uniq).sort((a, b) => a.localeCompare(b));
+  }, []);
 
   // Search/Suggestion State
   const [searchTerm, setSearchTerm] = useState("");
@@ -1758,7 +1773,7 @@ const App = () => {
   }
 
   return (
-    <div className="min-h-screen pb-12">
+    <div className="min-h-screen pb-28">
       {/* Toast Notification */}
       {notification && (
         <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium transition-all transform translate-y-0 ${notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
@@ -1848,25 +1863,6 @@ const App = () => {
             </div>
 
             <button
-              onClick={() => {
-                setFormData({ ...INITIAL_FORM, id: crypto.randomUUID(), serialNumber: generateSerialNumber(), timestamp: getJakartaDateTime() });
-                setActiveTab("form");
-              }}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "form" ? "bg-red-50 text-red-700" : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Log Baru
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "history" ? "bg-red-50 text-red-700" : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Riwayat ({savedLogs.length})
-            </button>
-            <button
               onClick={() => signOut(auth)}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
               title="Keluar"
@@ -1878,7 +1874,7 @@ const App = () => {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === "form" ? (
+        {activeTab === "form" && (
           <div className="space-y-6">
             
             {/* 1. SIMKES Data & AI Automation */}
@@ -2207,7 +2203,9 @@ const App = () => {
             </div>
 
           </div>
-        ) : (
+        )}
+
+        {activeTab === "history" && (
           <div className="space-y-6">
             <div className="flex justify-between items-center mb-6">
               <div>
@@ -2319,6 +2317,17 @@ const App = () => {
             )}
           </div>
         )}
+
+        {activeTab === "temperature" && (
+          <TemperatureMonitoring
+            user={user}
+            isAdminUser={isAdminUser}
+            locations={TROLLEY_LOCATIONS}
+            pharmacists={allStaffNames}
+            showNotification={showNotification}
+            getJakartaDateTime={getJakartaDateTime}
+          />
+        )}
       </main>
 
       {/* Delete Confirmation Modal */}
@@ -2377,6 +2386,46 @@ const App = () => {
           </div>
         </div>
       )}
+
+      {/* Floating Bottom Navigation */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/95 backdrop-blur-md border border-gray-200 shadow-xl px-4 py-2.5 rounded-full flex items-center space-x-2">
+        <button
+          onClick={() => {
+            setFormData({ ...INITIAL_FORM, id: crypto.randomUUID(), serialNumber: generateSerialNumber(), timestamp: getJakartaDateTime() });
+            setActiveTab("form");
+          }}
+          className={`flex items-center space-x-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+            activeTab === "form"
+              ? "bg-red-600 text-white shadow-md shadow-red-200"
+              : "text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          <Plus className="w-4 h-4" />
+          <span>Log Baru</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`flex items-center space-x-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+            activeTab === "history"
+              ? "bg-red-600 text-white shadow-md shadow-red-200"
+              : "text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          <History className="w-4 h-4" />
+          <span>Riwayat ({savedLogs.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("temperature")}
+          className={`flex items-center space-x-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+            activeTab === "temperature"
+              ? "bg-red-600 text-white shadow-md shadow-red-200"
+              : "text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          <Thermometer className="w-4 h-4" />
+          <span>Suhu</span>
+        </button>
+      </div>
     </div>
   );
 };

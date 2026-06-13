@@ -97,6 +97,18 @@ service cloud.firestore {
              (!('items' in data) || (data.items is list && data.items.size() <= 100));
     }
 
+    function isValidTemperatureLog(data) {
+      return data.keys().hasAll(['location', 'timestamp', 'roomTemp', 'fridgeTemp', 'officerName', 'authorUID', 'createdAt']) &&
+             data.location is string && data.location.size() > 0 && data.location.size() <= 100 &&
+             data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 50 &&
+             (data.roomTemp is number || data.roomTemp is float || data.roomTemp is int) &&
+             (data.fridgeTemp is number || data.fridgeTemp is float || data.fridgeTemp is int) &&
+             data.officerName is string && data.officerName.size() > 0 && data.officerName.size() <= 100 &&
+             data.authorUID is string && data.authorUID.size() > 0 && data.authorUID.size() <= 100 &&
+             data.createdAt is timestamp &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
+    }
+
     match /trolleyLogs/{logId} {
       allow list: if isAuthenticated();
       allow get: if isAuthenticated() && isValidId(logId);
@@ -119,6 +131,28 @@ service cloud.firestore {
                     );
                     
       allow delete: if (isAdmin() || (isOwner() && isNotSealed())) && isValidId(logId);
+    }
+
+    match /temperatureLogs/{logId} {
+      allow list: if isAuthenticated();
+      allow get: if isAuthenticated() && isValidId(logId);
+      
+      allow create: if isAuthenticated() && 
+                    isValidTemperatureLog(incoming()) && 
+                    uidUnchanged() &&
+                    incoming().createdAt == request.time;
+                    
+      allow update: if isAuthenticated() && 
+                    isValidId(logId) &&
+                    isValidTemperatureLog(incoming()) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['createdAt', 'authorUID']) &&
+                    (
+                      isAdmin() ||
+                      isOwner()
+                    );
+                    
+      allow delete: if (isAdmin() || isOwner()) && isValidId(logId);
     }
   }
 }

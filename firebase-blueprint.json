@@ -40,12 +40,33 @@
         "createdAt": { "type": "timestamp" }
       },
       "required": ["serialNumber", "patientName", "mrn", "timestamp", "authorUID", "createdAt"]
+    },
+    "TemperatureLog": {
+      "title": "TemperatureLog",
+      "description": "A log entry for temperature monitoring.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "location": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "roomTemp": { "type": "number" },
+        "fridgeTemp": { "type": "number" },
+        "notes": { "type": "string" },
+        "officerName": { "type": "string" },
+        "authorUID": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["location", "timestamp", "roomTemp", "fridgeTemp", "officerName", "authorUID", "createdAt"]
     }
   },
   "firestore": {
     "/trolleyLogs/{logId}": {
       "schema": { "$ref": "#/entities/TrolleyLog" },
       "description": "Stores all emergency trolley usage logs."
+    },
+    "/temperatureLogs/{logId}": {
+      "schema": { "$ref": "#/entities/TemperatureLog" },
+      "description": "Stores all temperature monitoring logs."
     }
   }
 }
